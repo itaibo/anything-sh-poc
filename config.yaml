@@ -39,5 +39,5 @@ commands:
     execute: |
       echo "Hello!"
 
-  only:
-    response: A response
+  only [a]:
+    response: A response with $a

@@ -47,79 +47,85 @@ function formatResponseValue(value) {
 }
 
 // Function to handle HTTP requests (or skip if no endpoint)
+// Function to handle HTTP requests (or skip if no endpoint)
 async function makeRequest(command, variables, headers, args) {
-    // Load the saved config (tokens, etc.)
-    const configStore = loadConfigStore();
+  // Load the saved config (tokens, etc.)
+  const configStore = loadConfigStore();
 
-    // Merge variables with stored config (stored tokens or variables)
-    const updatedVariables = { ...variables, ...configStore };
+  // Merge variables with stored config (stored tokens or variables)
+  const updatedVariables = { ...variables, ...configStore };
 
-    if (command.endpoint) {
-        // Replace variables in the URL and extract method
-        const urlWithVars = replaceVariables(command.endpoint, { ...updatedVariables, ...args });
-        const url = urlWithVars.split(' ')[1];
-        const method = urlWithVars.split(' ')[0];
-        const body = command.body ? JSON.parse(replaceVariables(JSON.stringify(command.body), { ...updatedVariables, ...args })) : {};
+  // If there's an endpoint, make the HTTP request
+  if (command.endpoint) {
+      // Replace variables in the URL and extract method
+      const urlWithVars = replaceVariables(command.endpoint, { ...updatedVariables, ...args });
+      const url = urlWithVars.split(' ')[1];
+      const method = urlWithVars.split(' ')[0];
+      const body = command.body ? JSON.parse(replaceVariables(JSON.stringify(command.body), { ...updatedVariables, ...args })) : {};
 
-        // Replace variables in headers
-        const updatedHeaders = {};
-        Object.keys(headers).forEach(key => {
-            updatedHeaders[key] = replaceVariables(headers[key], updatedVariables);
-        });
+      // Replace variables in headers
+      const updatedHeaders = {};
+      Object.keys(headers).forEach(key => {
+          updatedHeaders[key] = replaceVariables(headers[key], updatedVariables);
+      });
 
-        try {
-            // Send the HTTP request
-            const response = await axios({
-                method: method,
-                url: url,
-                headers: updatedHeaders,
-                data: body
-            });
+      try {
+          // Send the HTTP request
+          const response = await axios({
+              method: method,
+              url: url,
+              headers: updatedHeaders,
+              data: body
+          });
 
-            // Handle the response if defined
-            if (command.response) {
-                const responseText = command.response.replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
-                    const propertyPath = match.replace('$data.', '');
-                    const value = getNestedProperty(response.data, propertyPath);
-                    return formatResponseValue(value); // Post-process the value before returning
-                });
-                const responseUpdatedText = replaceVariables(responseText, { ...updatedVariables, ...args });
-                console.log(responseUpdatedText);
-            }
+          // Handle the response if defined
+          if (command.response) {
+              const responseText = command.response.replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
+                  const propertyPath = match.replace('$data.', '');
+                  const value = getNestedProperty(response.data, propertyPath);
+                  return formatResponseValue(value); // Post-process the value before returning
+              });
+              const responseUpdatedText = replaceVariables(responseText, { ...updatedVariables, ...args });
+              console.log(responseUpdatedText);
+          }
 
-            // Handle setting variables (e.g., tokens) from the response and save to the file
-            if (command.set) {
-                Object.keys(command.set).forEach(key => {
-                    const setValue = command.set[key].replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
-                        const propertyPath = match.replace('$data.', '');
-                        const value = getNestedProperty(response.data, propertyPath);
-                        return value || '';
-                    });
-                    
-                    // Save the set value in the config store (which holds tokens or other variables)
-                    updatedVariables[key] = replaceVariables(setValue, { ...updatedVariables, ...args });
-                });
+          // Handle setting variables (e.g., tokens) from the response and save to the file
+          if (command.set) {
+              Object.keys(command.set).forEach(key => {
+                  const setValue = command.set[key].replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
+                      const propertyPath = match.replace('$data.', '');
+                      const value = getNestedProperty(response.data, propertyPath);
+                      return value || '';
+                  });
+                  
+                  // Save the set value in the config store (which holds tokens or other variables)
+                  updatedVariables[key] = replaceVariables(setValue, { ...updatedVariables, ...args });
+              });
 
-                // Save updated config back to the file
-                saveConfigStore(updatedVariables);
+              // Save updated config back to the file
+              saveConfigStore(updatedVariables);
 
-                console.log('Updated configuration saved:', updatedVariables);
-            }
-        } catch (error) {
-            console.error(`Error: ${error.response ? JSON.stringify(error.response.data, null, 2) : error.message}`);
-        }
-    }
+              console.log('Updated configuration saved:', updatedVariables);
+          }
+      } catch (error) {
+          console.error(`Error: ${error.response ? JSON.stringify(error.response.data, null, 2) : error.message}`);
+      }
+  } else if (command.response) {
+      // If only a response is defined, print the response directly
+      const responseUpdatedText = replaceVariables(command.response, { ...updatedVariables, ...args });
+      console.log(responseUpdatedText);
+  }
 
-    // Execute shell commands if defined
-    if (command.execute) {
-        exec(command.execute, (err, stdout, stderr) => {
-            if (err) {
-                console.error(`Execution error: ${stderr}`);
-                return;
-            }
-            console.log(stdout.trim());
-        });
-    }
+  // Execute shell commands if defined
+  if (command.execute) {
+      exec(command.execute, (err, stdout, stderr) => {
+          if (err) {
+              console.error(`Execution error: ${stderr}`);
+              return;
+          }
+          console.log(stdout.trim()); // Trim to remove unnecessary newlines
+      });
+  }
 }
 
 // Define CLI commands dynamically based on YAML configuration
