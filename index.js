@@ -135,6 +135,8 @@ function setupCLI(config) {
         const cleanOptionalArgs = optionalArgs.map(arg => arg.replace(/[\[\]]/g, ''));
         const cleanMandatoryArgs = mandatoryArgs.map(arg => arg.replace(/[<>]/g, ''));
 
+        const argsDescriptions = commandDetails.args || {};
+
         // Register parent command (if not already registered)
         if (!registeredParents[parentCommandName]) {
             const parentCommand = program.command(parentCommandName);
@@ -142,12 +144,14 @@ function setupCLI(config) {
 
             // Add positional arguments (mandatory arguments)
             cleanMandatoryArgs.forEach(arg => {
-                parentCommand.argument(`<${arg}>`, `Mandatory positional argument ${arg}`);
+                const description = argsDescriptions[arg];
+                parentCommand.argument(`<${arg}>`, description || `Mandatory positional argument ${arg}`);
             });
 
             // Dynamically add options (optional arguments)
             cleanOptionalArgs.forEach(arg => {
-                parentCommand.option(`--${arg} [${arg}]`, `Optional argument ${arg}`);
+                const description = argsDescriptions[arg];
+                parentCommand.option(`--${arg} [${arg}]`, description || `Optional argument ${arg}`);
             });
 
             // Define action for the parent command
