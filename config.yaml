@@ -28,3 +28,10 @@ commands:
     response: Option is $option
     set:
       PIZZA: $option
+
+  see-product <id>:
+    endpoint: GET https://dummyjson.com/products/$id
+    response: |
+      Name: $data.title
+      Brand: $data.brand
+
