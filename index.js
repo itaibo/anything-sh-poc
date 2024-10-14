@@ -12,12 +12,16 @@ function loadConfig(filePath) {
     return yaml.parse(file);
 }
 
+// Utility function to access deep properties using dot notation
+function getNestedProperty(obj, path) {
+    return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+}
+
 // Function to handle HTTP requests
 async function makeRequest(command, variables, headers, args) {
+    // Corrected URL extraction
     let url = command.endpoint.replace(/\$BASE_URL/g, variables.BASE_URL).split(' ')[1];
     let method = command.endpoint.split(' ')[0];
-
-    // Prepare request body if it exists
     let body = command.body ? JSON.parse(replaceVariables(JSON.stringify(command.body), { ...variables, ...args })) : {};
 
     try {
@@ -28,13 +32,16 @@ async function makeRequest(command, variables, headers, args) {
             data: body
         });
 
-        // Handle response and setting new variables
+        // Handle response and replacing multiple dynamic placeholders in the response field
         if (command.response) {
-            let responseKey = command.response.split('$data.')[1];
-            let responseData = response.data[responseKey];
-            console.log(`Response: ${responseData}`);
+            const responseText = command.response.replace(/\$data\.[\w.]+/g, (match) => {
+                const propertyPath = match.replace('$data.', '');
+                return getNestedProperty(response.data, propertyPath) || 'undefined';
+            });
+            console.log(responseText);
         }
 
+        // Set headers based on the response
         if (command.set) {
             for (let key in command.set) {
                 let value = command.set[key].replace('$data.token', response.data.token);
