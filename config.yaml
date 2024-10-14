@@ -44,3 +44,7 @@ commands:
       mandatory: Takes a name
       optional: Takes a surname
     response: A response with $mandatory and $optional
+
+  ping:
+    description: A command to test options
+    response: Pong

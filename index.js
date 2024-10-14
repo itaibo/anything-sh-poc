@@ -121,6 +121,7 @@ function setupCLI(config) {
     // Iterate over each command in the YAML file
     Object.keys(config.commands).forEach(cmd => {
         const commandDetails = config.commands[cmd];
+        const commandDescription = commandDetails.description || '';
 
         // Split command into parent and subcommands
         const commandParts = cmd.split(' ');
@@ -140,7 +141,7 @@ function setupCLI(config) {
         // Register parent command (if not already registered)
         if (!registeredParents[parentCommandName]) {
             const parentCommand = program.command(parentCommandName);
-            parentCommand.description(`Executes ${parentCommandName}`);
+            parentCommand.description(commandDescription ?? `Executes ${parentCommandName}`);
 
             // Add positional arguments (mandatory arguments)
             cleanMandatoryArgs.forEach(arg => {
@@ -183,7 +184,7 @@ function setupCLI(config) {
             const parentCommand = registeredParents[parentCommandName];
 
             // Register the subcommand under the parent
-            const subcommand = parentCommand.command(subcommandName).description(`Executes ${cmd}`);
+            const subcommand = parentCommand.command(subcommandName).description(commandDescription ?? `Executes ${cmd}`);
         
             // Register subcommand action
             subcommand.action(async () => {
