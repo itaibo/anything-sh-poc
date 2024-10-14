@@ -17,6 +17,7 @@ commands:
     response: You got "$data.headers.Host" as a response. The user-agent is "$data.headers.User-Agent"
     set:
       BEARER_TOKEN: Bearer $data.headers.Host
+      PIZZA: $data.headers.User-Agent
 
   get something:
     endpoint: POST $BASE_URL/post

@@ -82,7 +82,8 @@ async function makeRequest(command, variables, headers, args) {
                 const value = getNestedProperty(response.data, propertyPath);
                 return formatResponseValue(value); // Post-process the value before returning
             });
-            console.log(responseText);
+            const responseUpdatedText = replaceVariables(responseText, { ...updatedVariables, ...args });
+            console.log(responseUpdatedText);
         }
 
         // Handle setting variables (e.g., tokens) from the response and save to the file
