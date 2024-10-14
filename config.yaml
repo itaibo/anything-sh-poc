@@ -3,9 +3,10 @@ version: 0.1
 
 variables:
   BASE_URL: https://httpbin.org
+  BEARER_TOKEN: 
 
 headers:
-  Authorization:
+  Authorization: $BEARER_TOKEN
   X-Key: abcd-abcd-abcd-abcd-abcd
 
 commands:
@@ -14,7 +15,9 @@ commands:
     endpoint: GET $BASE_URL/get
     description: A description of the command
     response: You got "$data.headers.Host" as a response. The user-agent is "$data.headers.User-Agent"
+    set:
+      BEARER_TOKEN: Bearer $data.headers.Host
 
   get something:
-    endpoint: GET $BASE_URL/get
+    endpoint: POST $BASE_URL/post
     response: Another
