@@ -65,7 +65,6 @@ async function makeRequest(command, variables, headers, args) {
         updatedHeaders[key] = replaceVariables(headers[key], updatedVariables);
     });
 
-    console.log(updatedHeaders)
     try {
         // Send the HTTP request
         const response = await axios({
@@ -96,7 +95,7 @@ async function makeRequest(command, variables, headers, args) {
                 });
                 
                 // Save the set value in the config store (which holds tokens or other variables)
-                updatedVariables[key] = setValue;
+                updatedVariables[key] = replaceVariables(setValue, { ...updatedVariables, ...args });;
             });
 
             // Save updated config back to the file

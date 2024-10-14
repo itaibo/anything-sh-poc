@@ -22,3 +22,9 @@ commands:
   get something:
     endpoint: POST $BASE_URL/post
     response: Another
+  
+  see <option>:
+    endpoint: POST $BASE_URL/post?test=$option
+    response: Option is $option
+    set:
+      PIZZA: $option
