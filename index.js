@@ -28,6 +28,7 @@ function saveConfigStore(config) {
 // Utility function to access deep properties using dot notation
 function getNestedProperty(obj, path) {
     return path.split('.').reduce((acc, part) => {
+        // Use bracket notation for keys with special characters like hyphens
         return acc && acc[part] !== undefined ? acc[part] : acc[part.replace(/-/g, '')];
     }, obj);
 }
@@ -46,118 +47,147 @@ function formatResponseValue(value) {
 }
 
 // Function to handle HTTP requests (or skip if no endpoint)
+// Function to handle HTTP requests (or skip if no endpoint)
 async function makeRequest(command, variables, headers, args) {
-    const configStore = loadConfigStore();
-    const updatedVariables = { ...variables, ...configStore };
+  // Load the saved config (tokens, etc.)
+  const configStore = loadConfigStore();
 
-    if (command.endpoint) {
-        const urlWithVars = replaceVariables(command.endpoint, { ...updatedVariables, ...args });
-        const url = urlWithVars.split(' ')[1];
-        const method = urlWithVars.split(' ')[0];
-        const body = command.body ? JSON.parse(replaceVariables(JSON.stringify(command.body), { ...updatedVariables, ...args })) : {};
+  // Merge variables with stored config (stored tokens or variables)
+  const updatedVariables = { ...variables, ...configStore };
 
-        const updatedHeaders = {};
-        Object.keys(headers).forEach(key => {
-            updatedHeaders[key] = replaceVariables(headers[key], updatedVariables);
-        });
+  // If there's an endpoint, make the HTTP request
+  if (command.endpoint) {
+      // Replace variables in the URL and extract method
+      const urlWithVars = replaceVariables(command.endpoint, { ...updatedVariables, ...args });
+      const url = urlWithVars.split(' ')[1];
+      const method = urlWithVars.split(' ')[0];
+      const body = command.body ? JSON.parse(replaceVariables(JSON.stringify(command.body), { ...updatedVariables, ...args })) : {};
 
-        try {
-            const response = await axios({
-                method: method,
-                url: url,
-                headers: updatedHeaders,
-                data: body
-            });
+      // Replace variables in headers
+      const updatedHeaders = {};
+      Object.keys(headers).forEach(key => {
+          updatedHeaders[key] = replaceVariables(headers[key], updatedVariables);
+      });
 
-            if (command.response) {
-                const responseText = command.response.replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
-                    const propertyPath = match.replace('$data.', '');
-                    const value = getNestedProperty(response.data, propertyPath);
-                    return formatResponseValue(value);
-                });
-                const responseUpdatedText = replaceVariables(responseText, { ...updatedVariables, ...args });
-                console.log(responseUpdatedText);
-            }
+      try {
+          // Send the HTTP request
+          const response = await axios({
+              method: method,
+              url: url,
+              headers: updatedHeaders,
+              data: body
+          });
 
-            if (command.set) {
-                Object.keys(command.set).forEach(key => {
-                    const setValue = command.set[key].replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
-                        const propertyPath = match.replace('$data.', '');
-                        const value = getNestedProperty(response.data, propertyPath);
-                        return value || '';
-                    });
-                    updatedVariables[key] = replaceVariables(setValue, { ...updatedVariables, ...args });
-                });
+          // Handle the response if defined
+          if (command.response) {
+              const responseText = command.response.replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
+                  const propertyPath = match.replace('$data.', '');
+                  const value = getNestedProperty(response.data, propertyPath);
+                  return formatResponseValue(value); // Post-process the value before returning
+              });
+              const responseUpdatedText = replaceVariables(responseText, { ...updatedVariables, ...args });
+              console.log(responseUpdatedText);
+          }
 
-                saveConfigStore(updatedVariables);
-                console.log('Updated configuration saved:', updatedVariables);
-            }
-        } catch (error) {
-            console.error(`Error: ${error.response ? JSON.stringify(error.response.data, null, 2) : error.message}`);
-        }
-    } else if (command.response) {
-        const responseUpdatedText = replaceVariables(command.response, { ...updatedVariables, ...args });
-        console.log(responseUpdatedText);
-    }
+          // Handle setting variables (e.g., tokens) from the response and save to the file
+          if (command.set) {
+              Object.keys(command.set).forEach(key => {
+                  const setValue = command.set[key].replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
+                      const propertyPath = match.replace('$data.', '');
+                      const value = getNestedProperty(response.data, propertyPath);
+                      return value || '';
+                  });
+                  
+                  // Save the set value in the config store (which holds tokens or other variables)
+                  updatedVariables[key] = replaceVariables(setValue, { ...updatedVariables, ...args });
+              });
 
-    if (command.execute) {
-        exec(command.execute, (err, stdout, stderr) => {
-            if (err) {
-                console.error(`Execution error: ${stderr}`);
-                return;
-            }
-            console.log(stdout.trim());
-        });
-    }
+              // Save updated config back to the file
+              saveConfigStore(updatedVariables);
+
+              console.log('Updated configuration saved:', updatedVariables);
+          }
+      } catch (error) {
+          console.error(`Error: ${error.response ? JSON.stringify(error.response.data, null, 2) : error.message}`);
+      }
+  } else if (command.response) {
+      // If only a response is defined, print the response directly
+      const responseUpdatedText = replaceVariables(command.response, { ...updatedVariables, ...args });
+      console.log(responseUpdatedText);
+  }
+
+  // Execute shell commands if defined
+  if (command.execute) {
+      exec(command.execute, (err, stdout, stderr) => {
+          if (err) {
+              console.error(`Execution error: ${stderr}`);
+              return;
+          }
+          console.log(stdout.trim()); // Trim to remove unnecessary newlines
+      });
+  }
 }
 
 // Define CLI commands dynamically based on YAML configuration
 function setupCLI(config) {
     const program = new Command();
+
+    // A map to store registered parent commands to prevent duplicates
     const registeredParents = {};
 
+    // Iterate over each command in the YAML file
     Object.keys(config.commands).forEach(cmd => {
         const commandDetails = config.commands[cmd];
 
+        // Split command into parent and subcommands
         const commandParts = cmd.split(' ');
-        const parentCommandName = commandParts[0];
-        const subcommandName = commandParts.slice(1).join(' ');
+        const parentCommandName = commandParts[0]; // e.g., "get"
+        const subcommandName = commandParts.slice(1).join(' '); // Get subcommand part if it exists (e.g., "something")
 
+        // Match optional ([option]) and mandatory (<option>) arguments
         const optionalArgs = cmd.match(/\[(.*?)\]/g) || [];
         const mandatoryArgs = cmd.match(/<(.*?)>/g) || [];
 
+        // Remove brackets from arguments
         const cleanOptionalArgs = optionalArgs.map(arg => arg.replace(/[\[\]]/g, ''));
         const cleanMandatoryArgs = mandatoryArgs.map(arg => arg.replace(/[<>]/g, ''));
 
+        // Register parent command (if not already registered)
         if (!registeredParents[parentCommandName]) {
             const parentCommand = program.command(parentCommandName);
             parentCommand.description(`Executes ${parentCommandName}`);
 
-            // Add positional arguments (mandatory arguments)
+            // Register both mandatory and optional arguments for parent command
             cleanMandatoryArgs.forEach(arg => {
-                parentCommand.argument(`${arg}`, `Mandatory positional argument ${arg}`);
+                parentCommand.argument(`<${arg}>`); // Mandatory arguments
             });
-
-            // Add options (for optional arguments)
             cleanOptionalArgs.forEach(arg => {
-                parentCommand.option(`--${arg}`, `Optional argument ${arg}`);
+                parentCommand.argument(`[${arg}]`); // Optional arguments
             });
 
             // Define action for the parent command
-            parentCommand.action(async (mandatoryArg, ...args) => {
-                const options = parentCommand.opts(); // Collect options like --optional
-                const parsedArgs = { mandatory: mandatoryArg, ...options }; // Merge mandatory positional and optional args
-
+            parentCommand.action(async (...args) => {
+                const parsedArgs = {};
+                [...cleanMandatoryArgs, ...cleanOptionalArgs].forEach((arg, index) => {
+                    if (args[index]) {
+                        parsedArgs[arg] = args[index];
+                    }
+                });
                 await makeRequest(commandDetails, config.variables, config.headers, parsedArgs);
             });
 
+            // Mark the parent as registered
             registeredParents[parentCommandName] = parentCommand;
         }
 
+        // Handle subcommands (e.g., "get something")
         if (subcommandName) {
             const parentCommand = registeredParents[parentCommandName];
-            const subcommand = parentCommand.command(subcommandName).description(`Executes ${cmd}`);
 
+            // Register the subcommand under the parent
+            const subcommand = parentCommand.command(subcommandName).description(`Executes ${cmd}`);
+          
+            // Register subcommand action
             subcommand.action(async () => {
                 await makeRequest(commandDetails, config.variables, config.headers, {});
             });
