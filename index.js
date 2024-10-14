@@ -6,6 +6,7 @@ const os = require('os');
 const yaml = require('yaml');
 const axios = require('axios');
 const { Command } = require('commander');
+const { exec } = require('child_process'); // Import exec to execute shell commands
 
 // Define the path for the config storage file (JSON format)
 const configStorePath = path.join(os.homedir(), 'anything_sh_config_store.json');
@@ -45,7 +46,7 @@ function formatResponseValue(value) {
     return value !== undefined ? value : 'undefined';  // Handle undefined values
 }
 
-// Function to handle HTTP requests
+// Function to handle HTTP requests (or skip if no endpoint)
 async function makeRequest(command, variables, headers, args) {
     // Load the saved config (tokens, etc.)
     const configStore = loadConfigStore();
@@ -53,58 +54,71 @@ async function makeRequest(command, variables, headers, args) {
     // Merge variables with stored config (stored tokens or variables)
     const updatedVariables = { ...variables, ...configStore };
 
-    // Replace variables in the URL and extract method
-    const urlWithVars = replaceVariables(command.endpoint, { ...updatedVariables, ...args });
-    const url = urlWithVars.split(' ')[1];
-    const method = urlWithVars.split(' ')[0];
-    const body = command.body ? JSON.parse(replaceVariables(JSON.stringify(command.body), { ...updatedVariables, ...args })) : {};
+    if (command.endpoint) {
+        // Replace variables in the URL and extract method
+        const urlWithVars = replaceVariables(command.endpoint, { ...updatedVariables, ...args });
+        const url = urlWithVars.split(' ')[1];
+        const method = urlWithVars.split(' ')[0];
+        const body = command.body ? JSON.parse(replaceVariables(JSON.stringify(command.body), { ...updatedVariables, ...args })) : {};
 
-    // Replace variables in headers
-    const updatedHeaders = {};
-    Object.keys(headers).forEach(key => {
-        updatedHeaders[key] = replaceVariables(headers[key], updatedVariables);
-    });
-
-    try {
-        // Send the HTTP request
-        const response = await axios({
-            method: method,
-            url: url,
-            headers: updatedHeaders,
-            data: body
+        // Replace variables in headers
+        const updatedHeaders = {};
+        Object.keys(headers).forEach(key => {
+            updatedHeaders[key] = replaceVariables(headers[key], updatedVariables);
         });
 
-        // Handle the response and replace dynamic placeholders
-        if (command.response) {
-            const responseText = command.response.replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
-                const propertyPath = match.replace('$data.', '');
-                const value = getNestedProperty(response.data, propertyPath);
-                return formatResponseValue(value); // Post-process the value before returning
+        try {
+            // Send the HTTP request
+            const response = await axios({
+                method: method,
+                url: url,
+                headers: updatedHeaders,
+                data: body
             });
-            const responseUpdatedText = replaceVariables(responseText, { ...updatedVariables, ...args });
-            console.log(responseUpdatedText);
-        }
 
-        // Handle setting variables (e.g., tokens) from the response and save to the file
-        if (command.set) {
-            Object.keys(command.set).forEach(key => {
-                const setValue = command.set[key].replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
+            // Handle the response if defined
+            if (command.response) {
+                const responseText = command.response.replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
                     const propertyPath = match.replace('$data.', '');
                     const value = getNestedProperty(response.data, propertyPath);
-                    return value || '';
+                    return formatResponseValue(value); // Post-process the value before returning
                 });
-                
-                // Save the set value in the config store (which holds tokens or other variables)
-                updatedVariables[key] = replaceVariables(setValue, { ...updatedVariables, ...args });;
-            });
+                const responseUpdatedText = replaceVariables(responseText, { ...updatedVariables, ...args });
+                console.log(responseUpdatedText);
+            }
 
-            // Save updated config back to the file
-            saveConfigStore(updatedVariables);
+            // Handle setting variables (e.g., tokens) from the response and save to the file
+            if (command.set) {
+                Object.keys(command.set).forEach(key => {
+                    const setValue = command.set[key].replace(/\$data\.[a-zA-Z0-9_.-]+/g, (match) => {
+                        const propertyPath = match.replace('$data.', '');
+                        const value = getNestedProperty(response.data, propertyPath);
+                        return value || '';
+                    });
+                    
+                    // Save the set value in the config store (which holds tokens or other variables)
+                    updatedVariables[key] = replaceVariables(setValue, { ...updatedVariables, ...args });
+                });
 
-            console.log('Updated configuration saved:', updatedVariables);
+                // Save updated config back to the file
+                saveConfigStore(updatedVariables);
+
+                console.log('Updated configuration saved:', updatedVariables);
+            }
+        } catch (error) {
+            console.error(`Error: ${error.response ? JSON.stringify(error.response.data, null, 2) : error.message}`);
         }
-    } catch (error) {
-        console.error(`Error: ${error.response ? JSON.stringify(error.response.data, null, 2) : error.message}`);
+    }
+
+    // Execute shell commands if defined
+    if (command.execute) {
+        exec(command.execute, (err, stdout, stderr) => {
+            if (err) {
+                console.error(`Execution error: ${stderr}`);
+                return;
+            }
+            console.log(stdout.trim());
+        });
     }
 }
 

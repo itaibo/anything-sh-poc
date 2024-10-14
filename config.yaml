@@ -35,3 +35,9 @@ commands:
       Name: $data.title
       Brand: $data.brand
 
+  do-something:
+    execute: |
+      echo "Hello!"
+
+  only:
+    response: A response
