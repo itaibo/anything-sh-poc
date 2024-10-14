@@ -97,25 +97,34 @@ function setupCLI(config) {
       const parentCommandName = commandParts[0]; // e.g., "get"
       const subcommandName = commandParts.slice(1).join(' '); // Get subcommand part if it exists (e.g., "something")
 
-      // Handle parent commands
+      // Match optional ([option]) and mandatory (<option>) arguments
+      const optionalArgs = cmd.match(/\[(.*?)\]/g) || [];
+      const mandatoryArgs = cmd.match(/<(.*?)>/g) || [];
+
+      // Remove brackets from arguments
+      const cleanOptionalArgs = optionalArgs.map(arg => arg.replace(/[\[\]]/g, ''));
+      const cleanMandatoryArgs = mandatoryArgs.map(arg => arg.replace(/[<>]/g, ''));
+
+      // Register parent command (if not already registered)
       if (!registeredParents[parentCommandName]) {
-          // Register the parent command (e.g., "get")
           const parentCommand = program.command(parentCommandName);
-          parentCommand.description(`Parent command: ${parentCommandName}`);
 
-          // Define arguments for the parent command if it has any (like "get [name]")
-          const argsList = cmd.match(/\[(.*?)\]/g) || [];
-          const cleanArgsList = argsList.map(arg => arg.replace(/[\[\]?]/g, '')); // Clean argument brackets
+          // Use description from YAML or fallback to default description
+          const description = commandDetails.description || `Executes ${parentCommandName}`;
+          parentCommand.description(description);
 
-          // Add arguments to the parent command
-          cleanArgsList.forEach(arg => {
-              parentCommand.argument(`[${arg}]`);
+          // Register both mandatory and optional arguments for parent command
+          cleanMandatoryArgs.forEach(arg => {
+              parentCommand.argument(`<${arg}>`); // Mandatory arguments
+          });
+          cleanOptionalArgs.forEach(arg => {
+              parentCommand.argument(`[${arg}]`); // Optional arguments
           });
 
-          // Register the action for the parent command
+          // Define action for the parent command
           parentCommand.action(async (...args) => {
               const parsedArgs = {};
-              cleanArgsList.forEach((arg, index) => {
+              [...cleanMandatoryArgs, ...cleanOptionalArgs].forEach((arg, index) => {
                   if (args[index]) {
                       parsedArgs[arg] = args[index];
                   }
@@ -132,8 +141,12 @@ function setupCLI(config) {
           const parentCommand = registeredParents[parentCommandName];
 
           // Register the subcommand under the parent
-          const subcommand = parentCommand.command(subcommandName).description(`Subcommand: ${subcommandName}`);
-          
+          const subcommand = parentCommand.command(subcommandName);
+
+          // Use description from YAML or fallback to default description
+          const subcommandDescription = commandDetails.description || `Executes "${cmd}"`;
+          subcommand.description(subcommandDescription);
+
           // Register subcommand action
           subcommand.action(async () => {
               await makeRequest(commandDetails, config.variables, config.headers, {});
@@ -143,6 +156,8 @@ function setupCLI(config) {
 
   program.parse(process.argv);
 }
+
+
 
 // Main function to execute
 (async () => {
