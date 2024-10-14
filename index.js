@@ -161,14 +161,7 @@ function setupCLI(config) {
           cleanMandatoryArgs.forEach(arg => {
               parentCommand.argument(`<${arg}>`, `Mandatory positional argument ${arg}`);
           });
-          cleanOptionalArgs.forEach(arg => {
-              parentCommand.argument(`[${arg}]`, `Optional positional argument ${arg}`);
-          });
-
           // Dynamically add options (like --mandatory, --optional)
-          cleanMandatoryArgs.forEach(arg => {
-              parentCommand.option(`--${arg} <${arg}>`, `Mandatory argument ${arg}`);
-          });
           cleanOptionalArgs.forEach(arg => {
               parentCommand.option(`--${arg} [${arg}]`, `Optional argument ${arg}`);
           });
