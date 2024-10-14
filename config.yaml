@@ -39,5 +39,5 @@ commands:
     execute: |
       echo "Hello!"
 
-  only [a]:
-    response: A response with $a
+  only <mandatory> [optional]:
+    response: A response with $mandatory and $optional

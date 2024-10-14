@@ -130,72 +130,93 @@ async function makeRequest(command, variables, headers, args) {
 
 // Define CLI commands dynamically based on YAML configuration
 function setupCLI(config) {
-    const program = new Command();
+  const program = new Command();
 
-    // A map to store registered parent commands to prevent duplicates
-    const registeredParents = {};
+  // A map to store registered parent commands to prevent duplicates
+  const registeredParents = {};
 
-    // Iterate over each command in the YAML file
-    Object.keys(config.commands).forEach(cmd => {
-        const commandDetails = config.commands[cmd];
+  // Iterate over each command in the YAML file
+  Object.keys(config.commands).forEach(cmd => {
+      const commandDetails = config.commands[cmd];
 
-        // Split command into parent and subcommands
-        const commandParts = cmd.split(' ');
-        const parentCommandName = commandParts[0]; // e.g., "get"
-        const subcommandName = commandParts.slice(1).join(' '); // Get subcommand part if it exists (e.g., "something")
+      // Split command into parent and subcommands
+      const commandParts = cmd.split(' ');
+      const parentCommandName = commandParts[0]; // e.g., "only"
+      const subcommandName = commandParts.slice(1).join(' '); // Get subcommand part if it exists (e.g., "something")
 
-        // Match optional ([option]) and mandatory (<option>) arguments
-        const optionalArgs = cmd.match(/\[(.*?)\]/g) || [];
-        const mandatoryArgs = cmd.match(/<(.*?)>/g) || [];
+      // Match optional ([option]) and mandatory (<option>) arguments
+      const optionalArgs = cmd.match(/\[(.*?)\]/g) || [];
+      const mandatoryArgs = cmd.match(/<(.*?)>/g) || [];
 
-        // Remove brackets from arguments
-        const cleanOptionalArgs = optionalArgs.map(arg => arg.replace(/[\[\]]/g, ''));
-        const cleanMandatoryArgs = mandatoryArgs.map(arg => arg.replace(/[<>]/g, ''));
+      // Remove brackets from arguments
+      const cleanOptionalArgs = optionalArgs.map(arg => arg.replace(/[\[\]]/g, ''));
+      const cleanMandatoryArgs = mandatoryArgs.map(arg => arg.replace(/[<>]/g, ''));
 
-        // Register parent command (if not already registered)
-        if (!registeredParents[parentCommandName]) {
-            const parentCommand = program.command(parentCommandName);
-            parentCommand.description(`Executes ${parentCommandName}`);
+      // Register parent command (if not already registered)
+      if (!registeredParents[parentCommandName]) {
+          const parentCommand = program.command(parentCommandName);
+          parentCommand.description(`Executes ${parentCommandName}`);
 
-            // Register both mandatory and optional arguments for parent command
-            cleanMandatoryArgs.forEach(arg => {
-                parentCommand.argument(`<${arg}>`); // Mandatory arguments
-            });
-            cleanOptionalArgs.forEach(arg => {
-                parentCommand.argument(`[${arg}]`); // Optional arguments
-            });
+          // Add positional arguments (mandatory and optional)
+          cleanMandatoryArgs.forEach(arg => {
+              parentCommand.argument(`<${arg}>`, `Mandatory positional argument ${arg}`);
+          });
+          cleanOptionalArgs.forEach(arg => {
+              parentCommand.argument(`[${arg}]`, `Optional positional argument ${arg}`);
+          });
 
-            // Define action for the parent command
-            parentCommand.action(async (...args) => {
-                const parsedArgs = {};
-                [...cleanMandatoryArgs, ...cleanOptionalArgs].forEach((arg, index) => {
-                    if (args[index]) {
-                        parsedArgs[arg] = args[index];
-                    }
-                });
-                await makeRequest(commandDetails, config.variables, config.headers, parsedArgs);
-            });
+          // Dynamically add options (like --mandatory, --optional)
+          cleanMandatoryArgs.forEach(arg => {
+              parentCommand.option(`--${arg} <${arg}>`, `Mandatory argument ${arg}`);
+          });
+          cleanOptionalArgs.forEach(arg => {
+              parentCommand.option(`--${arg} [${arg}]`, `Optional argument ${arg}`);
+          });
 
-            // Mark the parent as registered
-            registeredParents[parentCommandName] = parentCommand;
-        }
+          // Define action for the parent command
+          parentCommand.action(async (...args) => {
+              // Positional arguments (like first, second)
+              const parsedArgs = {};
+              [...cleanMandatoryArgs, ...cleanOptionalArgs].forEach((arg, index) => {
+                  if (args[index]) {
+                      parsedArgs[arg] = args[index];
+                  }
+              });
 
-        // Handle subcommands (e.g., "get something")
-        if (subcommandName) {
-            const parentCommand = registeredParents[parentCommandName];
+              // Options (like --mandatory=first)
+              const options = parentCommand.opts();
 
-            // Register the subcommand under the parent
-            const subcommand = parentCommand.command(subcommandName).description(`Executes ${cmd}`);
-          
-            // Register subcommand action
-            subcommand.action(async () => {
-                await makeRequest(commandDetails, config.variables, config.headers, {});
-            });
-        }
-    });
+              // Merge options and positional arguments, giving priority to options
+              const allArgs = { ...parsedArgs, ...options };
 
-    program.parse(process.argv);
+              // Call the makeRequest function with combined arguments
+              await makeRequest(commandDetails, config.variables, config.headers, allArgs);
+          });
+
+          // Mark the parent as registered
+          registeredParents[parentCommandName] = parentCommand;
+      }
+
+      // Handle subcommands (e.g., "get something")
+      if (subcommandName) {
+          const parentCommand = registeredParents[parentCommandName];
+
+          // Register the subcommand under the parent
+          const subcommand = parentCommand.command(subcommandName).description(`Executes ${cmd}`);
+        
+          // Register subcommand action
+          subcommand.action(async () => {
+              await makeRequest(commandDetails, config.variables, config.headers, {});
+          });
+      }
+  });
+
+  program.parse(process.argv);
 }
+
+
+
+
 
 // Load and parse the YAML file
 function loadConfig(filePath) {
