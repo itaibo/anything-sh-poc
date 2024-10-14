@@ -2,22 +2,14 @@ command: huspy
 version: 0.1
 
 variables:
-  BASE_URL: https://huspy.com
+  BASE_URL: https://httpbin.org
 
 headers:
   Authorization:
   X-Key: abcd-abcd-abcd-abcd-abcd
 
 commands:
-  # Identity
-  login [user] [?password]:
-      endpoint: POST $BASE_URL/login
-      body: { username: $name, password: $password }
-      response: $data.success
-      set:
-          Authorization: Bearer $data.token
-
-  # Ping
-  ping:
-    endpoint: GET $BASE_URL/ping
-    response: You got a $data.pong
+  # Get
+  get:
+    endpoint: GET $BASE_URL/get
+    response: You got $data.origin

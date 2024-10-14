@@ -14,7 +14,7 @@ function loadConfig(filePath) {
 
 // Function to handle HTTP requests
 async function makeRequest(command, variables, headers, args) {
-    let url = command.endpoint.replace(/\$BASE_URL/g, variables.BASE_URL);
+    let url = command.endpoint.replace(/\$BASE_URL/g, variables.BASE_URL).split(' ')[1];
     let method = command.endpoint.split(' ')[0];
 
     // Prepare request body if it exists
