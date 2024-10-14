@@ -40,4 +40,7 @@ commands:
       echo "Hello!"
 
   only <mandatory> [optional]:
+    args:
+      mandatory: Takes a name
+      optional: Takes a surname
     response: A response with $mandatory and $optional
