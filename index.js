@@ -20,6 +20,11 @@ function getNestedProperty(obj, path) {
     }, obj);
 }
 
+function removeOptionalArgs(command) {
+  // Use regex to remove any part of the string that is inside brackets [] including the brackets
+  return command.replace(/\[.*?\]/g, '').trim();
+}
+
 // Function to handle HTTP requests
 async function makeRequest(command, variables, headers, args) {
     // Replace variables in the URL and extract method
@@ -78,33 +83,65 @@ function replaceVariables(str, variables) {
 
 // Define CLI commands
 function setupCLI(config) {
-    const program = new Command();
+  const program = new Command();
 
-    Object.keys(config.commands).forEach(cmd => {
-        const commandDetails = config.commands[cmd];
+  // A map to store registered parent commands to prevent duplicates
+  const registeredParents = {};
 
-        // Define positional arguments from the YAML (like user and password)
-        const argsList = cmd.match(/\[(.*?)\]/g) || [];
-        const cleanArgsList = argsList.map(arg => arg.replace(/[\[\]?]/g, ''));
+  // Iterate over each command in the YAML file
+  Object.keys(config.commands).forEach(cmd => {
+      const commandDetails = config.commands[cmd];
 
-        const cliCommand = program.command(cmd.split(' ')[0]);
+      // Split command into parent and subcommands
+      const commandParts = cmd.split(' ');
+      const parentCommandName = commandParts[0]; // e.g., "get"
+      const subcommandName = commandParts.slice(1).join(' '); // Get subcommand part if it exists (e.g., "something")
 
-        cliCommand.description(`Execute ${cmd}`).action(async (...args) => {
-            const parsedArgs = {};
-            cleanArgsList.forEach((arg, index) => {
-                if (args[index]) {
-                    parsedArgs[arg] = args[index];
-                }
-            });
-            await makeRequest(commandDetails, config.variables, config.headers, parsedArgs);
-        });
+      // Handle parent commands
+      if (!registeredParents[parentCommandName]) {
+          // Register the parent command (e.g., "get")
+          const parentCommand = program.command(parentCommandName);
+          parentCommand.description(`Parent command: ${parentCommandName}`);
 
-        cleanArgsList.forEach(arg => {
-            cliCommand.argument(`<${arg}>`);
-        });
-    });
+          // Define arguments for the parent command if it has any (like "get [name]")
+          const argsList = cmd.match(/\[(.*?)\]/g) || [];
+          const cleanArgsList = argsList.map(arg => arg.replace(/[\[\]?]/g, '')); // Clean argument brackets
 
-    program.parse(process.argv);
+          // Add arguments to the parent command
+          cleanArgsList.forEach(arg => {
+              parentCommand.argument(`[${arg}]`);
+          });
+
+          // Register the action for the parent command
+          parentCommand.action(async (...args) => {
+              const parsedArgs = {};
+              cleanArgsList.forEach((arg, index) => {
+                  if (args[index]) {
+                      parsedArgs[arg] = args[index];
+                  }
+              });
+              await makeRequest(commandDetails, config.variables, config.headers, parsedArgs);
+          });
+
+          // Mark the parent as registered
+          registeredParents[parentCommandName] = parentCommand;
+      }
+
+      // Handle subcommands (e.g., "get something")
+      if (subcommandName) {
+          const parentCommand = registeredParents[parentCommandName];
+
+          // Register the subcommand under the parent
+          const subcommand = parentCommand.command(subcommandName).description(`Subcommand: ${subcommandName}`);
+          
+          // Register subcommand action
+          subcommand.action(async () => {
+              await makeRequest(commandDetails, config.variables, config.headers, {});
+          });
+      }
+  });
+
+  program.parse(process.argv);
 }
 
 // Main function to execute

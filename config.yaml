@@ -10,6 +10,10 @@ headers:
 
 commands:
   # Get
-  get:
+  get [ff]:
     endpoint: GET $BASE_URL/get
     response: You got "$data.headers.Host" as a response. The user-agent is "$data.headers.User-Agent"
+
+  get something:
+    endpoint: GET $BASE_URL/get
+    response: Another
